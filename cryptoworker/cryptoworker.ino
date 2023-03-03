@@ -19,7 +19,8 @@
   "rules":   [
     {"sensor": "temp", "max": 31, "action": "enableLed"}, 
     {"sensor": "temp", "min": 29, "action": "disableLed"}
-  ]
+  ],
+  "id": 1
 }
 */
 
@@ -35,20 +36,22 @@
 #include <DallasTemperature.h>
 #include <HardwareSerial.h>
 
-HardwareSerial SerialPort(2); // use UART2
+HardwareSerial rs485(2); // use UART2
 
 // const char *SSID = "kmiac";
 // const char *PWD = "26122012";
 const char *SSID = "RtVeart";
 const char *PWD = "tcapacitytcapacitytcapacity";
+int connectCount = 0;
 
+int deviceId = 1; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
 
 Preferences prefs;
 
 DynamicJsonDocument mainConfig(1024);
 StaticJsonDocument<1024> jsonDocument;
 char buffer[1024];
-
+String rs485Buffer;
 
 typedef struct DSTemperature {
   OneWire *oneWire; // oneWire instance to communicate with any OneWire devices
@@ -71,8 +74,8 @@ bool wifiConnected = false;
 
  
 void setup_routing() {       
-  server.on("/data", getData);     
-  server.on("/sensors", getSensorData);  
+  server.on("/data", sendData);     
+  server.on("/sensors", sendSensorData);  
   server.on("/setConfig", HTTP_POST, handlePost);              
   server.begin();    
 }
@@ -80,7 +83,7 @@ void setup_routing() {
 
 // загружаем и парсим json-конфиг с флеша 
 void loadPrefs() {
-  String confBuffer = "{\"sensors\":{},\"actions\":{},\"rules\":[]}";
+  String confBuffer = "{\"id\":1,\"sensors\":{},\"actions\":{},\"rules\":[]}";
   
   // readConfig from flash
   prefs.begin("mainConfig", true); // false for RW mode
@@ -90,6 +93,11 @@ void loadPrefs() {
   prefs.end();
 
   deserializeJson(mainConfig, confBuffer);
+
+  if(mainConfig.containsKey("id")) {
+      deviceId =  mainConfig["id"];
+  }
+
   JsonObject sensors = mainConfig["sensors"].as<JsonObject>();
 
   for (JsonPair p : sensors) { 
@@ -172,15 +180,20 @@ int doAction(String actionName) {
   digitalWrite(pin, level);
 } 
 
-void getData() {
+char * getData() {
   Serial.println("Get Data");
   //jsonDocument.clear();
   
   serializeJson(mainConfig, buffer);
+  return buffer;
+}
+
+void sendData () {
+  char *buf = getData(); // result in global buffer  
   server.send(200, "application/json", buffer);
 }
 
-void getSensorData() {
+char * getSensorData() {
   Serial.println("Get Sensor Data");
   jsonDocument.clear();
 
@@ -192,11 +205,31 @@ void getSensorData() {
   }  
 
   serializeJson(jsonDocument, buffer);
-  server.send(200, "application/json", buffer);
+  return buffer;
+}
+
+void sendSensorData() {
+  char *buf = getSensorData(); // result in global buffer
+  server.send(200, "application/json", buf);
 }
 
 void handlePost() {
   String body = server.arg("plain");
+  char *buf = setConfig(body);
+
+  if (buf == NULL) { //no error
+    server.send(200, "application/json", "{\"success\": true}");
+    Serial.println("Config saved! Restarting...");    
+    delay(2000);
+    ESP.restart();
+
+  } else {
+    server.send(200, "application/json", buf);  
+  }  
+}
+
+
+char * setConfig(String &body) {  
   DeserializationError err = deserializeJson(jsonDocument, body);
 
   if (err) {
@@ -208,57 +241,117 @@ void handlePost() {
     obj["success"] = false;
     obj["msg"] = err.c_str();
     serializeJson(jsonDocument, buffer);
-    server.send(200, "application/json", buffer);   
-    return; 
+    return buffer; 
+    
   } else {
     prefs.begin("mainConfig", false); // false for RW mode
     prefs.putString("jsonBuffer", body);   
     prefs.end();
 
-    Serial.println("Config saved! Restarting...");    
-    server.send(200, "application/json", "{\"success\": true}");
-    delay(2000);
-    ESP.restart();
-    return;
+    return NULL;
   }   
 }
 
-void rs485 (void * parameter) {
+void sendRs485(String &action, char *data = NULL) {
+      digitalWrite(32, HIGH);        
+      digitalWrite(33, HIGH);  
+      delay(50);
+      String id(deviceId);
+      rs485.write('^');
+      if(deviceId < 10) rs485.write( '0' ); // 0
+      rs485.write( id.c_str() ); 
+      rs485.write(';');
+      rs485.write(action.c_str()); 
+      if (data) {
+        rs485.write(';');
+        rs485.write(data); 
+      }
+      rs485.write('$');
+      
+      delay(100);
+      digitalWrite(32, LOW);        //  (LOW to receive value from Master)
+      digitalWrite(33, LOW);        //  (LOW to receive value from Master)
+}
+
+void parseCmd (String &cmd) {
+  Serial.print("Cmd: ");
+  Serial.println(cmd.c_str());
+  if (cmd.length() < 2) return;
+  int id = cmd.substring(0,2).toInt();
+  Serial.print(F("deviceId: ")); Serial.print(deviceId); Serial.print(F(", dst: ")); Serial.println(id);
+
+  cmd.remove(0, 3); // 2 цифры - номер устройства и ;
+  int end = cmd.indexOf(';');  
+  String action = end > 0 ? cmd.substring(0, end) : cmd;
+  if (id == deviceId) {
+    
+    if (action == "sensors") {
+        char *buf = getSensorData(); // result in global buffer
+        sendRs485(action, buf);       
+    } else if (action == "data") {       
+        char *buf = getData(); // result in global buffer
+        sendRs485(action, buf);   
+    } else if(action == "setConfig" && cmd.length() > end) {
+        String body = cmd.substring(end+1);
+        char *buf = setConfig(body);
+
+        if (buf == NULL) { //no error
+          sendRs485(action, "OK"); 
+          Serial.println("Config saved! Restarting...");    
+          delay(2000);
+          ESP.restart();
+        } else {
+          sendRs485(action, buf);
+        }  
+    }
+
+  }
+  
+}
+
+
+void rs485Worker (void * parameter) {
+   rs485Buffer.reserve(1024); // резервируем место для избежания фрагментации памяти при увеличении размера строки (rs485Buffer += c)
    pinMode(32, OUTPUT);
    digitalWrite(32, LOW);        //  (LOW to receive value from Master)
    pinMode(33, OUTPUT);
    digitalWrite(33, LOW);        //  (LOW to receive value from Master)
-   SerialPort.begin(9600, SERIAL_8N1, 16, 17); 
-   
+   rs485.begin(115200, SERIAL_8N1, 16, 17); 
+
+
+
+
    for (;;) {     
-      
-    while(Serial.available()) {
-      SerialPort.write(Serial.read()); // write it to the 485
-    }  
+      int i=0;
+      while(rs485.available()) {
+        char c =  rs485.read();
+        Serial.print(c);
+        if(c == '^') {
+          rs485Buffer = "";
+        } else if(c == '$') {
+          parseCmd(rs485Buffer);
+        } else {
+          rs485Buffer += c;
+        }
 
-    delay(500); 
+        i++;
+        // delay(10);      
+      }  
 
-    int i=0;
-     while(SerialPort.available()) {
-      Serial.write(SerialPort.read()); // write it to the 485
-      i++;
-      delay(10); 
-    }  
-    Serial.println("");
-    Serial.print(F("Bytes read: "));
-    Serial.println(i);
+      if (i > 0) {
+        Serial.print(F("Bytes read: "));
+        Serial.println(i);
+      }
 
-     vTaskDelay(6000 / portTICK_PERIOD_MS);
+      vTaskDelay(500 / portTICK_PERIOD_MS);
    }
 }
-
-
 
 void setup_task() {    
   xTaskCreate(     
   worker,      
   "Main worker fn",      
-  1000,      
+  2000,      
   NULL,      
   1,     
   NULL     
@@ -266,9 +359,9 @@ void setup_task() {
 
 
   xTaskCreate(     
-  rs485,      
+  rs485Worker,      
   "RS485 fn",      
-  1000,      
+  5000,      
   NULL,      
   2,     
   NULL     
@@ -278,6 +371,7 @@ void setup_task() {
 
 void setup() {     
   Serial.begin(115200); 
+  rs485.begin(115200, SERIAL_8N1);
 
   Serial.print("Connecting to Wi-Fi");
   WiFi.begin(SSID, PWD);
@@ -286,13 +380,25 @@ void setup() {
   setup_task();       
 }    
        
-void loop() {    
+void loop() {   
+
   if (WiFi.status() != WL_CONNECTED) { // wait for connect
     Serial.print(".");
     delay(200);
     digitalWrite(26, HIGH);
     delay(200);
     digitalWrite(26, LOW);    
+    if (connectCount > 1000) {
+      Serial.println("Reconnect...");    
+      connectCount = 0;
+      // wifiConnected = false; // comment if not need to repeat setup_routing() 
+      WiFi.disconnect();
+      delay(1000);
+      WiFi.reconnect();
+      delay(1000);
+    }
+    connectCount++;
+
   } else if (!wifiConnected) { // init webserver
     Serial.print("Connected! IP Address: ");
     Serial.println(WiFi.localIP());    
@@ -301,4 +407,6 @@ void loop() {
   } else { // webserver 
     server.handleClient();     
   }
+
+  delay(100);
 }
