@@ -30,6 +30,7 @@
 #include <stdlib.h>
 #include <WiFi.h>
 #include <WebServer.h>
+#include <uri/UriBraces.h>
 #include <ArduinoJson.h>
 #include <FreeRTOS.h>
 #include <OneWire.h>
@@ -76,6 +77,10 @@ bool wifiConnected = false;
 void setup_routing() {       
   server.on("/data", sendData);     
   server.on("/sensors", sendSensorData);  
+  server.on(UriBraces("/action/{}"), []() {
+    String action = server.pathArg(0);
+    doAction(action);
+  });
   server.on("/setConfig", HTTP_POST, handlePost);              
   server.begin();    
 }
@@ -213,6 +218,7 @@ void sendSensorData() {
   server.send(200, "application/json", buf);
 }
 
+
 void handlePost() {
   String body = server.arg("plain");
   char *buf = setConfig(body);
@@ -291,6 +297,10 @@ void parseCmd (String &cmd) {
     } else if (action == "data") {       
         char *buf = getData(); // result in global buffer
         sendRs485(action, buf);   
+    } else if (action == "action") {   
+        String action = cmd.substring(end+1);    
+        doAction(action);
+        sendRs485(action, "OK");
     } else if(action == "setConfig" && cmd.length() > end) {
         String body = cmd.substring(end+1);
         char *buf = setConfig(body);
