@@ -203,9 +203,6 @@ char * getSensorData() {
   jsonDocument.clear();
 
   for (DSTemperature s : tempeatureSensors) {
-    // JsonObject sensor  = jsonDocument.createNestedObject(s.name);
-    // sensor["name"] = s.name;
-    // sensor["t"] = s.t;
     jsonDocument[s.name] = s.t;
   }  
 
@@ -327,9 +324,6 @@ void rs485Worker (void * parameter) {
    pinMode(33, OUTPUT);
    digitalWrite(33, LOW);        //  (LOW to receive value from Master)
    rs485.begin(115200, SERIAL_8N1, 16, 17); 
-
-
-
 
    for (;;) {     
       int i=0;
