@@ -51,9 +51,9 @@ int deviceId = 1; // Код клиента в сети RS485. Можно зад�
 Preferences prefs;
 Expression expression;
 
-DynamicJsonDocument mainConfig(1024);
-StaticJsonDocument<1024> jsonDocument;
-char buffer[1024];
+DynamicJsonDocument mainConfig(2048);
+StaticJsonDocument<2048> jsonDocument;
+char buffer[2048];
 String rs485Buffer;
 
 typedef struct DSTemperature {
@@ -112,6 +112,11 @@ void loadPrefs() {
         int pin = p.value()["pin"];     
         tempeatureSensors.push_back(DSTemperature(pin, p.key().c_str()));      
       }      
+
+      if (p.value()["type"].as<String>() == String("pin")) {
+        int pin = p.value()["pin"];  
+        pinMode(pin, INPUT);
+      }
   }  
 
   JsonObject actions = mainConfig["actions"]; //.as<JsonObject>();
@@ -128,7 +133,7 @@ void loadPrefs() {
 
 float getSensorValue(String sensorName = "") {
   for (DSTemperature &s : tempeatureSensors) {
-    if (sensorName.length() == 0 || s.name == sensorName) {
+    if (sensorName.length() == 0 || s.name == sensorName) {      
       s.sensor->requestTemperatures(); 
       s.t = s.sensor->getTempCByIndex(0);
 
@@ -150,7 +155,12 @@ void worker(void * parameter) {
 
    for (;;) {     
       
-      getSensorValue(); // read all sensors
+      getSensorValue(); // read all sensors once
+
+      /*  Используется тупо String.replace имен датчиков при подстановке в выражение. 
+          Поэтому нельзя называть датчики так, чтобы название одного датчика оказылось подстрокой другого.
+          Напр. temp и temp_new. В этом случае напр. при temp=5 выражение "temp>10 | temp_new>15" будет "5>10 | 5_new>15"      
+      */
 
       for (JsonObject p : rules) { 
           String exp = p["exp"];
@@ -166,7 +176,16 @@ void worker(void * parameter) {
 
             exp.replace(s.name, String(s.t, 2));          
           }
-              
+
+          for (JsonPair p : sensors) { 
+              if (p.value()["type"].as<String>() == String("pin")) {
+                int pin = p.value()["pin"];  
+                int v = digitalRead(pin);
+                Serial.print(p.key().c_str()); Serial.print(": "); Serial.println(v);
+                exp.replace(p.key().c_str(), String(v));  
+              }
+          }            
+               
           if(ok) {
             Serial.print("Evaluating: "); Serial.println(exp.c_str());
             float result = expression.evaluate(exp);
@@ -210,6 +229,16 @@ char * getSensorData() {
   for (DSTemperature s : tempeatureSensors) {
     jsonDocument[s.name] = s.t;
   }  
+
+  JsonObject sensors = mainConfig["sensors"].as<JsonObject>();  
+  for (JsonPair p : sensors) { 
+      if (p.value()["type"].as<String>() == String("pin")) {
+        int pin = p.value()["pin"];  
+        int v = digitalRead(pin);
+        // Serial.print(p.key().c_str()); Serial.print(": "); Serial.println(v);
+        jsonDocument[p.key()] = v;
+      }
+  }    
 
   serializeJson(jsonDocument, buffer);
   return buffer;

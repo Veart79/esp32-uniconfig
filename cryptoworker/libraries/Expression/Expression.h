@@ -52,7 +52,7 @@ class Expression {
         } else {
             currentLex = "";
         }
-        Serial.print( " [lex: " ); Serial.print( currentLex.c_str() ); Serial.println("] ");
+        // Serial.print( " [lex: " ); Serial.print( currentLex.c_str() ); Serial.println("] ");
     }
 
 
@@ -119,7 +119,7 @@ class Expression {
     }
     
     bool isNumeric(String &s)  {
-        return s != "0" && s.toFloat() != 0;
+        return s == "0" || s.toFloat() != 0;
     }
     
     float parseF()
