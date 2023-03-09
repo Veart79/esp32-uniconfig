@@ -17,8 +17,8 @@
     "enablePump": {"pin": 21, "level": 1}
   },
   "rules":   [
-    {"sensor": "temp", "max": 31, "action": "enableLed"}, 
-    {"sensor": "temp", "min": 29, "action": "disableLed"}
+    {"exp": "temp>31", "action": "enableLed"}, 
+    {"exp": "temp<29", "action": "disableLed"}
   ],
   "id": 1
 }
@@ -36,6 +36,7 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <HardwareSerial.h>
+#include "./libraries/Expression/Expression.h"
 
 HardwareSerial rs485(2); // use UART2
 
@@ -48,6 +49,7 @@ int connectCount = 0;
 int deviceId = 1; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
 
 Preferences prefs;
+Expression expression;
 
 DynamicJsonDocument mainConfig(1024);
 StaticJsonDocument<1024> jsonDocument;
@@ -123,59 +125,62 @@ void loadPrefs() {
   } 
 }
 
-// Основной рабочий цикл (чтение датчиков, выполнение правил)
-void worker(void * parameter) {
-   JsonArray rules = mainConfig["rules"]; 
 
-   for (;;) {     
-      //"rules":   [{"sensor": "temp", "max": 100, "action": "disableFan"},  {"sensor": "pressure", "min": 10, "action": "enablePump"}]
-      for (JsonObject p : rules) { 
-          //const char* key = p.key().c_str();
-          String s = p["sensor"];          
-
-          float v = getSensorValue(p["sensor"]);
-          if (v == -999) {
-            Serial.print("Read sensor error: ");
-            Serial.println(s.c_str());
-            continue;
-          }
-
-          p["value"] = v;
-
-          Serial.print(s.c_str());
-          Serial.print(": ");
-          Serial.println(v);
-
-          if (p.containsKey("max")) {
-            int max = p["max"];
-            if (v >= max) {
-              doAction(p["action"]);
-            }
-          } 
-
-          if (p.containsKey("min")) {
-            int min = p["min"];
-            if (v <= min) {
-              doAction(p["action"]);
-            }
-          }  
-      }  
-
-     vTaskDelay(6000 / portTICK_PERIOD_MS);
-   }
-}
-
-float getSensorValue(String sensorName) {
+float getSensorValue(String sensorName = "") {
   for (DSTemperature &s : tempeatureSensors) {
-    if (s.name == sensorName) {
+    if (sensorName.length() == 0 || s.name == sensorName) {
       s.sensor->requestTemperatures(); 
       s.t = s.sensor->getTempCByIndex(0);
+
+      Serial.print(s.name.c_str());
+      Serial.print(": ");
+      Serial.println(s.t);   
+            
       return s.t;
     }
   }
 
   return -999;
 }
+
+// Основной рабочий цикл (чтение датчиков, выполнение правил)
+void worker(void * parameter) {
+   JsonArray rules = mainConfig["rules"]; 
+   JsonObject sensors = mainConfig["sensors"];
+
+   for (;;) {     
+      
+      getSensorValue(); // read all sensors
+
+      for (JsonObject p : rules) { 
+          String exp = p["exp"];
+
+          bool ok = true;
+          for (DSTemperature &s : tempeatureSensors) {
+            if (s.t == -999) {
+              Serial.print("Read sensor error: ");
+              Serial.println(s.name.c_str());
+              ok = false;
+              break;
+            }       
+
+            exp.replace(s.name, String(s.t, 2));          
+          }
+              
+          if(ok) {
+            Serial.print("Evaluating: "); Serial.println(exp.c_str());
+            float result = expression.evaluate(exp);
+            Serial.print( "Result: "); Serial.println( result );
+            if(result) {
+                doAction(p["action"]);
+            }
+          }
+      }  
+
+     vTaskDelay(6000 / portTICK_PERIOD_MS);
+   }
+}
+
 
 int doAction(String actionName) {
   Serial.println(actionName.c_str());
@@ -362,20 +367,28 @@ void setup_task() {
   );     
 
 
-  xTaskCreate(     
-  rs485Worker,      
-  "RS485 fn",      
-  5000,      
-  NULL,      
-  2,     
-  NULL     
-  ); 
+  if (deviceId) {
+    xTaskCreate(     
+    rs485Worker,      
+    "RS485 fn",      
+    5000,      
+    NULL,      
+    2,     
+    NULL     
+    ); 
+  }
   
 }
 
 void setup() {     
   Serial.begin(115200); 
   rs485.begin(115200, SERIAL_8N1);
+
+  String exp = "27.19<29"; // "12.2 = 2 | ((45.1 > 3) & (5< 6.2))";  
+
+  Serial.print( "expression: "); Serial.println( exp.c_str() );
+  float result = expression.evaluate(exp);
+  Serial.print( "Result: "); Serial.println( result );
 
   Serial.print("Connecting to Wi-Fi");
   WiFi.begin(SSID, PWD);
