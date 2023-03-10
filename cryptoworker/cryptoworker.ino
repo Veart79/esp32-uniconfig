@@ -46,7 +46,7 @@ const char *SSID = "RtVeart";
 const char *PWD = "tcapacitytcapacitytcapacity";
 int connectCount = 0;
 
-int deviceId = 1; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
+int deviceId = 0; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
 
 Preferences prefs;
 Expression expression;
