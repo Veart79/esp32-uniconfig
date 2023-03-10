@@ -1,5 +1,5 @@
-#include <iostream>
-using namespace std;
+// #include <iostream>
+// using namespace std;
  
  
 
@@ -153,16 +153,3 @@ class Expression {
     }
 };
 
-/*
-void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(115200); 
-
-  String expression = "12.2 = 2 | ((45.1 > 3) & (5< 6.2))";  
-  Expression exp;  
-  Serial.print( "expression: "); Serial.println( expression.c_str() );
-  float result = exp.evaluate(expression);
-  Serial.print( "Result: "); Serial.println( result );
-}
-
-*/

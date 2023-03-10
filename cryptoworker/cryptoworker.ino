@@ -7,21 +7,23 @@
 */
 
 /* Пример конфига:
-{
-  "sensors": {
-    "temp":     {"type": "ds18b20", "pin": 25}    
-  },          
-  "actions": {
-    "disableLed": {"pin": 26, "level": 0}, 
-    "enableLed": {"pin": 26, "level": 1}, 
-    "enablePump": {"pin": 21, "level": 1}
-  },
-  "rules":   [
-    {"exp": "temp>31", "action": "enableLed"}, 
-    {"exp": "temp<29", "action": "disableLed"}
-  ],
-  "id": 1
-}
+   {
+     "id": 0,
+     "sensors": {
+       "temp": {"type": "ds18b20", "pin": 25},
+       "pin4": {"type": "pin", "pin": 4}    
+     },          
+     "actions": {
+       "enableLed":  {"pin": 26, "level": 1}, 
+       "disableLed": {"pin": 26, "level": 0}, 
+       "enablePump": {"pin": 21, "level": 1}
+     },
+     "rules":   [
+       {"exp": "temp > 31", "action": "enableLed"}, 
+       {"exp": "temp<28", "action": "disableLed"},
+       {"exp": "pin4=1 & temp<30", "action": "disableLed"}
+     ]
+   }
 */
 
 
