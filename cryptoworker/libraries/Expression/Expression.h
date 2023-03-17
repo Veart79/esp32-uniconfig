@@ -45,7 +45,7 @@ class Expression {
         
         if (pos < expression.length()) {        
             currentLex = expression[pos];
-            if(expression[pos] >= '0' && expression[pos] <='9') {          
+            if(expression[pos] == '-' || (expression[pos] >= '0' && expression[pos] <='9')) {
               while((expression[pos+1] >= '0' && expression[pos+1] <='9') || expression[pos+1] == '.') {
                 currentLex += expression[++pos];
               }
@@ -126,7 +126,7 @@ class Expression {
     float parseF()
     {   // Serial.print( "ParseF: " << currentLex;
         float b;
-        if ( isNumeric(currentLex) ) 
+        if ( isNumeric(currentLex)) 
         {
             b = currentLex.toFloat(); //(currentLex != '0')
             getNextLexeme();

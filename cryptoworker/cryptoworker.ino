@@ -111,8 +111,13 @@ void loadPrefs() {
 
   for (JsonPair p : sensors) { 
       if (p.value()["type"].as<String>() == String("ds18b20")) {
-        int pin = p.value()["pin"];     
-        tempeatureSensors.push_back(DSTemperature(pin, p.key().c_str()));      
+        int pin = p.value()["pin"];   
+        try {  
+          tempeatureSensors.push_back(DSTemperature(pin, p.key().c_str()));  
+          Serial.print("Add sensor: ");  Serial.println(p.key().c_str());      
+        } catch(...) {
+          Serial.print("Sensor not found: ");  Serial.println(p.key().c_str());  
+        }
       }      
 
       if (p.value()["type"].as<String>() == String("pin")) {
@@ -133,15 +138,19 @@ void loadPrefs() {
 }
 
 
-float getSensorValue(String sensorName = "") {
+float getSensorValue(String sensorName = "") {    
   for (DSTemperature &s : tempeatureSensors) {
     if (sensorName.length() == 0 || s.name == sensorName) {      
-      s.sensor->requestTemperatures(); 
-      s.t = s.sensor->getTempCByIndex(0);
-
       Serial.print(s.name.c_str());
       Serial.print(": ");
-      Serial.println(s.t);   
+
+      try {
+        s.sensor->requestTemperatures(); 
+        s.t = s.sensor->getTempCByIndex(0);
+        Serial.println(s.t);
+      } catch(...) {
+        Serial.println("error");
+      }
             
       return s.t;
     }
@@ -169,14 +178,14 @@ void worker(void * parameter) {
 
           bool ok = true;
           for (DSTemperature &s : tempeatureSensors) {
-            if (s.t == -999) {
-              Serial.print("Read sensor error: ");
+            if (s.t == -999 && exp.indexOf(s.name) > -1) {
+              Serial.print("Rule '"); Serial.print(exp.c_str()); Serial.print("' skipped. No sensor value: ");
               Serial.println(s.name.c_str());
               ok = false;
               break;
             }       
 
-            exp.replace(s.name, String(s.t, 2));          
+            exp.replace(s.name, String(s.t, 2));   
           }
 
           for (JsonPair p : sensors) { 
