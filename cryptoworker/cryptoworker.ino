@@ -203,7 +203,7 @@ void worker(void * parameter) {
 }
 
 
-int doAction(String actionName) {
+void doAction(String actionName) {
   Serial.println(actionName.c_str());
   JsonObject action = mainConfig["actions"][actionName]; //{"pin": 1, "level": 0}, 
   int pin = action["pin"];

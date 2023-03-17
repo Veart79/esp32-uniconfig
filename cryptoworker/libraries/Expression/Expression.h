@@ -35,6 +35,7 @@ class Expression {
       } catch ( const char * err ) {
           Serial.print( "Error: "); Serial.println( err ) ; // << ", but " << currentLex << " got." << endl;
       }
+      return 0;
     }
     
     inline void getNextLexeme() // Функция получения следующей лексемы 
