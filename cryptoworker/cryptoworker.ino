@@ -57,6 +57,7 @@ DynamicJsonDocument mainConfig(2048);
 StaticJsonDocument<2048> jsonDocument;
 char buffer[2048];
 String rs485Buffer;
+String varBounds("><= &|");
 
 typedef struct DSTemperature {
   OneWire *oneWire; // oneWire instance to communicate with any OneWire devices
@@ -67,11 +68,21 @@ typedef struct DSTemperature {
         oneWire = new OneWire(pin);
         sensor = new DallasTemperature(oneWire);   
         name = name_;
-        t = -999;
+        t = -127;
+  }
+};
+
+typedef struct Sensor {  
+  String name;
+  float value;
+  Sensor (String name_, float value_=-127) {
+    name = name_;
+    value = value_;
   }
 };
 
 std::vector <DSTemperature> tempeatureSensors;
+std::vector <Sensor> sensorsData;
 
 WebServer server(80);
 bool wifiConnected = false;
@@ -110,20 +121,23 @@ void loadPrefs() {
   JsonObject sensors = mainConfig["sensors"].as<JsonObject>();
 
   for (JsonPair p : sensors) { 
+      sensorsData.push_back( Sensor(p.key().c_str()) );
+
       if (p.value()["type"].as<String>() == String("ds18b20")) {
         int pin = p.value()["pin"];   
-        try {  
-          tempeatureSensors.push_back(DSTemperature(pin, p.key().c_str()));  
-          Serial.print("Add sensor: ");  Serial.println(p.key().c_str());      
-        } catch(...) {
-          Serial.print("Sensor not found: ");  Serial.println(p.key().c_str());  
-        }
+        tempeatureSensors.push_back(DSTemperature(pin, p.key().c_str()));  
+        Serial.print("Add sensor: ");  Serial.println(p.key().c_str());   
       }      
 
       if (p.value()["type"].as<String>() == String("pin")) {
         int pin = p.value()["pin"];  
         pinMode(pin, INPUT);
       }
+  }  
+
+  std::sort(sensorsData.begin(), sensorsData.end(), [] (Sensor const& a, Sensor const& b) { return a.name.length() > b.name.length(); });
+  for (Sensor s : sensorsData) {
+    Serial.print("Sorted: "); Serial.println(s.name.c_str());
   }  
 
   JsonObject actions = mainConfig["actions"]; //.as<JsonObject>();
@@ -140,6 +154,7 @@ void loadPrefs() {
 
 float getSensorValue(String sensorName = "") {    
   for (DSTemperature &s : tempeatureSensors) {
+
     if (sensorName.length() == 0 || s.name == sensorName) {      
       Serial.print(s.name.c_str());
       Serial.print(": ");
@@ -147,58 +162,113 @@ float getSensorValue(String sensorName = "") {
       try {
         s.sensor->requestTemperatures(); 
         s.t = s.sensor->getTempCByIndex(0);
+        setSensorValueByName(s.name, s.t);
         Serial.println(s.t);
       } catch(...) {
         Serial.println("error");
       }
             
-      return s.t;
+      if (sensorName.length() > 0) return s.t;
     }
   }
 
-  return -999;
+  return -127;
+}
+
+void getAllSensorValues () {
+  getSensorValue();
+
+  JsonObject sensors = mainConfig["sensors"];
+  for (JsonPair p : sensors) {       
+      if (p.value()["type"].as<String>() == String("pin")) {
+        int pin = p.value()["pin"];  
+        int v = digitalRead(pin);
+        setSensorValueByName(p.key().c_str(), v);
+      }
+  }  
+}
+
+void setSensorValueByName(const String &name, float value) {  
+    for (Sensor &s : sensorsData) {
+      if (s.name == name) {
+        s.value = value;
+      }       
+    }  
+}
+
+/*
+float getSensorValueByName(const String &name) {  
+    JsonObject sensors = mainConfig["sensors"];
+
+    for (DSTemperature &s : tempeatureSensors) {
+      if (s.name == name) {
+        return s.t;
+      }       
+    }
+
+    for (JsonPair p : sensors) {       
+        if ( name == p.key().c_str() && p.value()["type"].as<String>() == String("pin")) {
+          int pin = p.value()["pin"];  
+          int v = digitalRead(pin);
+          return v;
+        }
+    }  
+
+    return -127;
+}
+*/
+
+bool hasVar( String const &exp,  String const &name) {
+  int pos =  exp.indexOf(name);
+  int posEnd = pos + name.length(); // next pos after last char of var
+
+  if (pos > -1) {
+    bool leftOk = (pos == 0) || (varBounds.indexOf( exp[pos-1] ) > -1);
+    bool rightOk = (pos == exp.length()) || (varBounds.indexOf( exp[posEnd] ) > -1);
+    return leftOk && rightOk;
+  }
+
+  return false;
 }
 
 // Основной рабочий цикл (чтение датчиков, выполнение правил)
 void worker(void * parameter) {
    JsonArray rules = mainConfig["rules"]; 
-   JsonObject sensors = mainConfig["sensors"];
 
    for (;;) {     
       
-      getSensorValue(); // read all sensors once
+      getAllSensorValues(); // read all sensors once
 
-      /*  Используется тупо String.replace имен датчиков при подстановке в выражение. 
-          Поэтому нельзя называть датчики так, чтобы название одного датчика оказылось подстрокой другого.
-          Напр. temp и temp_new. В этом случае напр. при temp=5 выражение "temp>10 | temp_new>15" будет "5>10 | 5_new>15"      
-      */
+
 
       for (JsonObject p : rules) { 
           String exp = p["exp"];
+          Serial.print("Rule: ");  Serial.println(exp.c_str());
 
           bool ok = true;
-          for (DSTemperature &s : tempeatureSensors) {
-            if (s.t == -999 && exp.indexOf(s.name) > -1) {
-              Serial.print("Rule '"); Serial.print(exp.c_str()); Serial.print("' skipped. No sensor value: ");
-              Serial.println(s.name.c_str());
-              ok = false;
-              break;
-            }       
+ 
+      /*  Используется String.replace имен датчиков при подстановке в выражение. 
+          Если название одного датчика окажется подстрокой другого, то будет ошибка при реплейсе
+          напр. temp и temp_new. В этом случае напр. при temp=5 выражение "temp>10 | temp_new>15" будет "5>10 | 5_new>15"      
+          Поэтому сортируем список имен датчиков по длине строки и меняем начиная от самых длинных.
+      */
+          for (Sensor s : sensorsData) {            
+            float v = s.value;
 
-            exp.replace(s.name, String(s.t, 2));   
-          }
+            if(hasVar(exp, s.name)) {
+              if (v < -126) { // 127 float 126.999 - 127.001
+                Serial.print("Rule skipped. No sensor value: ");
+                Serial.println(s.name.c_str());
+                ok = false;
+                break;
+              }  
 
-          for (JsonPair p : sensors) { 
-              if (p.value()["type"].as<String>() == String("pin")) {
-                int pin = p.value()["pin"];  
-                int v = digitalRead(pin);
-                Serial.print(p.key().c_str()); Serial.print(": "); Serial.println(v);
-                exp.replace(p.key().c_str(), String(v));  
-              }
-          }            
+              exp.replace(s.name, String(v, (v==1 || v==0) ? 0 : 2));   
+            }                       
+          }                   
                
           if(ok) {
-            Serial.print("Evaluating: "); Serial.println(exp.c_str());
+            Serial.print("Evaluating: ");  Serial.println(exp.c_str());
             float result = expression.evaluate(exp);
             Serial.print( "Result: "); Serial.println( result );
             if(result) {
@@ -237,6 +307,12 @@ char * getSensorData() {
   Serial.println("Get Sensor Data");
   jsonDocument.clear();
 
+
+  for (Sensor s : sensorsData) {            
+    jsonDocument[s.name] = s.value;
+  }
+
+/*
   for (DSTemperature s : tempeatureSensors) {
     jsonDocument[s.name] = s.t;
   }  
@@ -250,6 +326,7 @@ char * getSensorData() {
         jsonDocument[p.key()] = v;
       }
   }    
+*/
 
   serializeJson(jsonDocument, buffer);
   return buffer;
@@ -422,7 +499,7 @@ void setup_task() {
 
 void setup() {     
   Serial.begin(115200); 
-  rs485.begin(115200, SERIAL_8N1);
+  if (deviceId) rs485.begin(115200, SERIAL_8N1);
 
   String exp = "27.19<29"; // "12.2 = 2 | ((45.1 > 3) & (5< 6.2))";  
 
