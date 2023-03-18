@@ -312,22 +312,6 @@ char * getSensorData() {
     jsonDocument[s.name] = s.value;
   }
 
-/*
-  for (DSTemperature s : tempeatureSensors) {
-    jsonDocument[s.name] = s.t;
-  }  
-
-  JsonObject sensors = mainConfig["sensors"].as<JsonObject>();  
-  for (JsonPair p : sensors) { 
-      if (p.value()["type"].as<String>() == String("pin")) {
-        int pin = p.value()["pin"];  
-        int v = digitalRead(pin);
-        // Serial.print(p.key().c_str()); Serial.print(": "); Serial.println(v);
-        jsonDocument[p.key()] = v;
-      }
-  }    
-*/
-
   serializeJson(jsonDocument, buffer);
   return buffer;
 }
