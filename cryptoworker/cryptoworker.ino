@@ -271,8 +271,10 @@ void worker(void * parameter) {
             Serial.print("Evaluating: ");  Serial.println(exp.c_str());
             float result = expression.evaluate(exp);
             Serial.print( "Result: "); Serial.println( result );
-            if(result) {
-                doAction(p["action"]);
+            if(result == 1) {
+                if (p.containsKey("action")) doAction(p["action"]);
+            } else if(result == 0) {
+                if (p.containsKey("else")) doAction(p["else"]);
             }
           }
       }  

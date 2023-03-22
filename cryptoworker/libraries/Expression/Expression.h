@@ -1,9 +1,3 @@
-// #include <iostream>
-// using namespace std;
- 
- 
-
-
 /* Грамматика для логического выражения
 S -> E&
 E -> T | T '|' E | T '&' E
@@ -35,7 +29,7 @@ class Expression {
       } catch ( const char * err ) {
           Serial.print( "Error: "); Serial.println( err ) ; // << ", but " << currentLex << " got." << endl;
       }
-      return 0;
+      return -127;
     }
     
     inline void getNextLexeme() // Функция получения следующей лексемы 
