@@ -185,6 +185,12 @@ void getAllSensorValues () {
         int v = digitalRead(pin);
         setSensorValueByName(p.key().c_str(), v);
       }
+
+      if (p.value()["type"].as<String>() == String("adc")) {
+        int pin = p.value()["pin"];  
+        int v = analogReadMilliVolts(pin); // analogRead(pin);
+        setSensorValueByName(p.key().c_str(), v);
+      }      
   }  
 }
 
