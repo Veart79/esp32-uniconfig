@@ -187,14 +187,16 @@ void getAllSensorValues () {
       }
 
       if (p.value()["type"].as<String>() == String("adc")) {
-        int pin = p.value()["pin"];  
-        int v = analogRead(pin);
+        int pin = p.value()["pin"]; 
+        float k = p.value()["k"]; 
+        float v = (k ? k : 1) * analogRead(pin);
         setSensorValueByName(p.key().c_str(), v);
       }      
 
       if (p.value()["type"].as<String>() == String("mv")) {
         int pin = p.value()["pin"];  
-        int v = analogReadMilliVolts(pin); // analogRead(pin);
+        float k = p.value()["k"];
+        float v = (k ? k : 1) * analogReadMilliVolts(pin); // analogRead(pin);
         setSensorValueByName(p.key().c_str(), v);
       }      
   }  
