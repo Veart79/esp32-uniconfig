@@ -19,9 +19,9 @@
        "enablePump": {"pin": 21, "level": 1}
      },
      "rules":   [
-       {"exp": "temp > 31", "action": "enableLed"}, 
-       {"exp": "temp<28", "action": "disableLed"},
-       {"exp": "pin4=1 & temp<30", "action": "disableLed"}
+       {"exp": "temp > 31", "actions": ["enableLed"]}, 
+       {"exp": "temp<28", "actions": ["disableLed"]},
+       {"exp": "pin4=1 & temp<30", "actions": ["disableLed"]}
      ]
    }
 */
@@ -49,6 +49,7 @@ const char *PWD = "tcapacitytcapacitytcapacity";
 int connectCount = 0;
 
 int deviceId = 0; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
+int mode = 0; // режим работы контроллера (обычно 0 - автоматический 1 - ручной). Переменная используется в правилах и конфиге. Хранится а ПЗУ
 
 Preferences prefs;
 Expression expression;
@@ -107,6 +108,10 @@ void loadPrefs() {
   
   // readConfig from flash
   prefs.begin("mainConfig", true); // false for RW mode
+  if(prefs.isKey("mode")) {
+    mode = prefs.getInt("mode"); 
+  }
+  
   if(prefs.isKey("jsonBuffer")) {
     confBuffer = prefs.getString("jsonBuffer"); 
   }
@@ -134,6 +139,7 @@ void loadPrefs() {
         pinMode(pin, INPUT);
       }
   }  
+  sensorsData.push_back( Sensor("mode", mode) );
 
   std::sort(sensorsData.begin(), sensorsData.end(), [] (Sensor const& a, Sensor const& b) { return a.name.length() > b.name.length(); });
   for (Sensor s : sensorsData) {
@@ -200,6 +206,7 @@ void getAllSensorValues () {
         setSensorValueByName(p.key().c_str(), v);
       }      
   }  
+  setSensorValueByName("mode", mode);
 }
 
 void setSensorValueByName(const String &name, float value) {  
@@ -286,9 +293,19 @@ void worker(void * parameter) {
             float result = expression.evaluate(exp);
             Serial.print( "Result: "); Serial.println( result );
             if(result == 1) {
-                if (p.containsKey("action")) doAction(p["action"]);
+                if (p.containsKey("actions")) {
+                  JsonArray actions = p["actions"];
+                  for (String action : actions) {
+                    doAction(action);
+                  }
+                }
             } else if(result == 0) {
-                if (p.containsKey("else")) doAction(p["else"]);
+                if (p.containsKey("else")) {
+                  JsonArray actions = p["else"];
+                  for (String action : actions) {
+                    doAction(action);
+                  }
+                }
             }
           }
       }  
@@ -301,9 +318,23 @@ void worker(void * parameter) {
 void doAction(String actionName) {
   Serial.println(actionName.c_str());
   JsonObject action = mainConfig["actions"][actionName]; //{"pin": 1, "level": 0}, 
-  int pin = action["pin"];
-  int level = action["level"];
-  digitalWrite(pin, level);
+
+  if(action.containsKey("pin")) {
+    int pin = action["pin"];
+    int level = action["level"];
+    digitalWrite(pin, level);
+  } else if (action.containsKey("var")) {
+      if (action["var"] == "mode") {
+          int value = action["value"];          
+          if (mode != value) {
+              mode = value;
+              setSensorValueByName("mode", mode);
+              prefs.begin("mainConfig", false); // false for RW mode
+              prefs.putInt("mode", mode);   
+              prefs.end();
+          }
+      }
+  }
 } 
 
 char * getData() {
