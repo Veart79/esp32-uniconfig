@@ -9,6 +9,8 @@
 /* Пример конфига:
    {
      "id": 0,
+     "ssid": "wifi",
+     "pwd": "pass",
      "sensors": {
        "temp": {"type": "ds18b20", "pin": 25},
        "pin4": {"type": "pin", "pin": 4}    
@@ -44,7 +46,7 @@ HardwareSerial rs485(2); // use UART2
 
 // const char *SSID = "kmiac";
 // const char *PWD = "26122012";
-const char *SSID = "RtVeart";
+const char *SSID = "RtVeart";   // по умолчанию, если нет в json-конфиге
 const char *PWD = "tcapacitytcapacitytcapacity";
 int connectCount = 0;
 
@@ -118,6 +120,13 @@ void loadPrefs() {
   prefs.end();
 
   deserializeJson(mainConfig, confBuffer);
+
+  Serial.print("Connecting to Wi-Fi");
+  if (mainConfig.containsKey("ssid") && mainConfig.containsKey("pwd")) {
+    WiFi.begin(mainConfig["ssid"].as<String>().c_str(), mainConfig["pwd"].as<String>().c_str());
+  } else {
+    WiFi.begin(SSID, PWD);
+  }
 
   if(mainConfig.containsKey("id")) {
       deviceId =  mainConfig["id"];
@@ -531,15 +540,6 @@ void setup_task() {
 void setup() {     
   Serial.begin(115200); 
   if (deviceId) rs485.begin(115200, SERIAL_8N1);
-
-  String exp = "27.19<29"; // "12.2 = 2 | ((45.1 > 3) & (5< 6.2))";  
-
-  Serial.print( "expression: "); Serial.println( exp.c_str() );
-  float result = expression.evaluate(exp);
-  Serial.print( "Result: "); Serial.println( result );
-
-  Serial.print("Connecting to Wi-Fi");
-  WiFi.begin(SSID, PWD);
    
   loadPrefs();  
   setup_task();       
