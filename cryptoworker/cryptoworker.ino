@@ -46,8 +46,8 @@ HardwareSerial rs485(2); // use UART2
 
 // const char *SSID = "kmiac";
 // const char *PWD = "26122012";
-const char *SSID = "RtVeart";   // по умолчанию, если нет в json-конфиге
-const char *PWD = "tcapacitytcapacitytcapacity";
+const char *SSID = "wifi";   // по умолчанию, если нет в json-конфиге
+const char *PWD = "password";
 int connectCount = 0;
 
 int deviceId = 0; // Код клиента в сети RS485. Можно задать в конфиге, в параметре id
@@ -448,7 +448,7 @@ void parseCmd (String &cmd) {
   cmd.remove(0, 3); // 2 цифры - номер устройства и ;
   int end = cmd.indexOf(';');  
   String action = end > 0 ? cmd.substring(0, end) : cmd;
-  if (id == deviceId) {
+  if (id == deviceId || !id) {
     
     if (action == "sensors") {
         char *buf = getSensorData(); // result in global buffer
@@ -457,9 +457,9 @@ void parseCmd (String &cmd) {
         char *buf = getData(); // result in global buffer
         sendRs485(action, buf);   
     } else if (action == "action") {   
-        String action = cmd.substring(end+1);    
-        doAction(action);
-        sendRs485(action, "OK");
+        String act = cmd.substring(end+1);    
+        doAction(act);
+        sendRs485(act, "OK");
     } else if(action == "setConfig" && cmd.length() > end) {
         String body = cmd.substring(end+1);
         char *buf = setConfig(body);
@@ -472,12 +472,41 @@ void parseCmd (String &cmd) {
         } else {
           sendRs485(action, buf);
         }  
+    } else if (action == "wifi") { 
+        cmd.remove(0, 5); // отрезаем: wifi;
+        end = cmd.indexOf(';');  // cmd: ssidName;password
+        String ssid = cmd.substring(0, end);    
+        String pwd = cmd.substring(end+1);    
+      
+        Serial.print(F("Reconnect: ")); Serial.print(ssid.c_str()); Serial.print(F(", password: ")); Serial.println(pwd);
+        WiFi.disconnect();        
+        delay(1000);        
+        WiFi.begin(ssid.c_str(), pwd.c_str());                
     }
 
   }
   
 }
 
+void readCommandFromSerial () {
+   rs485Buffer.reserve(127); // Используем буфер от 485. Резервируем место для избежания фрагментации памяти при увеличении размера строки (rs485Buffer += c)
+
+    int i=0;
+    while(Serial.available()) {
+      char c =  Serial.read();
+      
+      if(c == '^') {
+        rs485Buffer = "";
+      } else if(c == '$') {
+        parseCmd(rs485Buffer);
+      } else {
+        rs485Buffer += c;
+      }
+
+      i++;
+      delay(20);      
+    }     
+}
 
 void rs485Worker (void * parameter) {
    rs485Buffer.reserve(1024); // резервируем место для избежания фрагментации памяти при увеличении размера строки (rs485Buffer += c)
@@ -562,6 +591,9 @@ void loop() {
       WiFi.reconnect();
       delay(1000);
     }
+    
+    readCommandFromSerial();
+    
     connectCount++;
 
   } else if (!wifiConnected) { // init webserver
