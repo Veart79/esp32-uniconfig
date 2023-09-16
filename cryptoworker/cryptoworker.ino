@@ -477,8 +477,15 @@ void parseCmd (String &cmd) {
         end = cmd.indexOf(';');  // cmd: ssidName;password
         String ssid = cmd.substring(0, end);    
         String pwd = cmd.substring(end+1);    
-      
-        Serial.print(F("Reconnect: ")); Serial.print(ssid.c_str()); Serial.print(F(", password: ")); Serial.println(pwd);
+
+        mainConfig["ssid"] = ssid;
+        mainConfig["pwd"] = pwd;
+        serializeJson(mainConfig, buffer);
+        prefs.begin("mainConfig", false); // false for RW mode
+        prefs.putString("jsonBuffer", buffer);   
+        prefs.end();
+        Serial.print(F("Set wifi: ")); Serial.print(ssid.c_str()); Serial.print(F(", password: ")); Serial.println(pwd);
+        Serial.print(F("Reconnect... "));
         WiFi.disconnect();        
         delay(1000);        
         WiFi.begin(ssid.c_str(), pwd.c_str());                
@@ -582,7 +589,7 @@ void loop() {
     digitalWrite(26, HIGH);
     delay(200);
     digitalWrite(26, LOW);    
-    if (connectCount > 1000) {
+    if (connectCount > 50) {
       Serial.println("Reconnect...");    
       connectCount = 0;
       // wifiConnected = false; // comment if not need to repeat setup_routing() 

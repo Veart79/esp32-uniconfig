@@ -69,15 +69,15 @@ class Expression {
         {
             getNextLexeme();
             float b2 = parseE();         
-            Serial.print( b ); Serial.print( '|' );
+            // Serial.print( b ); Serial.print( '|' );
             b = b2 || b;
-            Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
+            // Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
         } else if (currentLex == "&") {
             getNextLexeme();
             float b2 = parseE();
-            Serial.print( b ); Serial.print( '&' );
+            // Serial.print( b ); Serial.print( '&' );
             b = b && b2;
-            Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
+            // Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
         }
         
 
@@ -91,23 +91,23 @@ class Expression {
         if (currentLex == ">") {
             getNextLexeme();
             float b2 = parseT();
-            Serial.print( b ); Serial.print( '>' );
+            // Serial.print( b ); Serial.print( '>' );
             b = b > b2;
-            Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
+            // Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
 
         } else if (currentLex == "<") {
             getNextLexeme();
             float b2 = parseT();
-            Serial.print( b ); Serial.print( '<' );
+            // Serial.print( b ); Serial.print( '<' );
             b = b < b2;
-            Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
+            // Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
           
         } else if (currentLex == "=") {        
             getNextLexeme();
             float b2 = parseT();
-            Serial.print( b ); Serial.print( '=' );
+            // Serial.print( b ); Serial.print( '=' );
             b = b2 == b;
-            Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
+            // Serial.print( b2 ); Serial.print( "  => " ); Serial.println(b);
         }
         
         return b;
