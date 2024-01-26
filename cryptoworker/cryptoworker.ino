@@ -356,7 +356,7 @@ char * getData() {
 
 void sendData () {
   char *buf = getData(); // result in global buffer  
-  server.send(200, "application/json", buffer);
+  server.send(200, "application/json", buf);
 }
 
 char * getSensorData() {
