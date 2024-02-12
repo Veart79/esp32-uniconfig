@@ -265,12 +265,11 @@ bool hasVar( String const &exp,  String const &name) {
 void worker(void * parameter) {
    JsonArray rules = mainConfig["rules"];
 
+   bool firstLoop = true;
    for (;;) {
 
       getAllSensorValues(); // read all sensors once
 
-
-      bool firstLoop = true;
       for (JsonObject p : rules) {
           String exp = p["exp"];
           Serial.print("Rule: ");  Serial.println(exp.c_str());
@@ -320,11 +319,10 @@ void worker(void * parameter) {
                   }
                 }
             }
-          }
-
-          firstLoop = false;
+          }          
       }
 
+     firstLoop = false;
      vTaskDelay(6000 / portTICK_PERIOD_MS);
    }
 }
