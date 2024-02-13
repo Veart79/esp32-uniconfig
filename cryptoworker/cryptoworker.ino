@@ -275,6 +275,7 @@ void worker(void * parameter) {
           Serial.print("Rule: ");  Serial.println(exp.c_str());
 
           bool ok = true;
+          bool stop = false;
 
       /*  Используется String.replace имен датчиков при подстановке в выражение.
           Если название одного датчика окажется подстрокой другого, то будет ошибка при реплейсе
@@ -308,6 +309,11 @@ void worker(void * parameter) {
                 if (p.containsKey("actions")) {
                   JsonArray actions = p["actions"];
                   for (String action : actions) {
+                    if (action == "_break_") {
+                      stop = true;
+                      break;
+                    }
+                    
                     doAction(action);
                   }
                 }
@@ -315,11 +321,18 @@ void worker(void * parameter) {
                 if (p.containsKey("else")) {
                   JsonArray actions = p["else"];
                   for (String action : actions) {
+                    if (action == "_break_") {
+                      stop = true;
+                      break;
+                    }
+                    
                     doAction(action);
                   }
                 }
             }
-          }          
+          }   
+
+        if (stop) break; // прерываем обработку правил в текущем цикле (все последующие правила игнорируются, цикл начнется снова)
       }
 
      firstLoop = false;
