@@ -60,7 +60,7 @@ DynamicJsonDocument mainConfig(3072);
 StaticJsonDocument<3072> jsonDocument;
 char buffer[3072];
 String rs485Buffer;
-String varBounds("><= &|()");
+String varBounds("><= &|()+-");
 
 typedef struct DSTemperature {
   OneWire *oneWire; // oneWire instance to communicate with any OneWire devices
